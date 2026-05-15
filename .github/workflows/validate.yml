@@ -1,0 +1,105 @@
+name: Validate skill
+
+# What this workflow checks:
+#   - SKILL.md frontmatter has the required `name:` and `description:` fields
+#   - Every `references/<file>.md` mentioned in SKILL.md or any reference file
+#     actually exists on disk (catches dangling cross-references)
+#   - The release zip has the expected flat layout: SKILL.md and references/
+#     at the root, with no wrapping skill/ directory
+#
+# What this workflow deliberately does NOT check:
+#   - External Adapty doc URLs (https://adapty.io/docs/...).
+#     Reason: the skill intentionally references only the docs root
+#     (https://adapty.io/docs/) and instructs the runtime to search the
+#     concept from there. Hard-coding deep-link checks here would re-create
+#     the brittleness we removed — Adapty doc reorgs would break this CI
+#     for reasons outside the repo's control. If a regression introduces a
+#     deep adapty.io/docs/<slug> URL, a separate audit step or `grep` rule
+#     would be the right place for it, not this workflow.
+#   - Internal factual drift (claims about Adapty SDK APIs that may go
+#     stale). Verified at migration time against live docs; not a CI
+#     concern.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify SKILL.md frontmatter
+        run: |
+          set -e
+          file=skill/SKILL.md
+          if [ ! -f "$file" ]; then
+            echo "::error::skill/SKILL.md not found"
+            exit 1
+          fi
+          # Frontmatter must start at line 1, close on a later line, and contain name + description
+          first_line=$(head -n 1 "$file")
+          if [ "$first_line" != "---" ]; then
+            echo "::error::SKILL.md must start with --- (YAML frontmatter)"
+            exit 1
+          fi
+          # Extract frontmatter block (lines between the first two --- delimiters)
+          frontmatter=$(awk '/^---$/{c++; next} c==1' "$file")
+          if ! echo "$frontmatter" | grep -qE "^name:[[:space:]]+"; then
+            echo "::error::SKILL.md frontmatter missing 'name:' field"
+            exit 1
+          fi
+          if ! echo "$frontmatter" | grep -qE "^description:[[:space:]]+"; then
+            echo "::error::SKILL.md frontmatter missing 'description:' field"
+            exit 1
+          fi
+          echo "✓ SKILL.md frontmatter valid"
+
+      - name: Verify referenced files exist
+        run: |
+          set -e
+          cd skill
+          missing=0
+          # Find every `references/<file>.md` mention in SKILL.md and any reference file,
+          # then verify each one exists on disk.
+          while IFS= read -r ref; do
+            [ -z "$ref" ] && continue
+            if [ ! -f "$ref" ]; then
+              echo "::error::Referenced file does not exist: skill/$ref"
+              missing=$((missing+1))
+            fi
+          done < <(grep -hoE 'references/[A-Za-z0-9_-]+\.md' SKILL.md references/*.md | sort -u)
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing referenced file(s) missing"
+            exit 1
+          fi
+          echo "✓ All referenced files exist"
+
+      - name: Build skill zip and verify layout
+        run: |
+          set -e
+          cd skill
+          zip -r ../adapty-migration-skill.zip .
+          cd ..
+          echo "--- zip contents ---"
+          unzip -l adapty-migration-skill.zip
+          echo "--- /zip contents ---"
+          # The zip root must contain SKILL.md directly (no wrapping skill/ directory).
+          if ! unzip -l adapty-migration-skill.zip | awk '{print $NF}' | grep -qx "SKILL.md"; then
+            echo "::error::zip root is missing SKILL.md (expected flat layout)"
+            exit 1
+          fi
+          # And must NOT contain a top-level skill/ folder
+          if unzip -l adapty-migration-skill.zip | awk '{print $NF}' | grep -qE "^skill/"; then
+            echo "::error::zip should not wrap contents in a top-level skill/ folder"
+            exit 1
+          fi
+          # references/ directory must be present at the root
+          if ! unzip -l adapty-migration-skill.zip | awk '{print $NF}' | grep -qE "^references/"; then
+            echo "::error::zip root is missing references/ directory"
+            exit 1
+          fi
+          echo "✓ Zip layout is flat with SKILL.md + references/ at root"

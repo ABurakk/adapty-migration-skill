@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package skill
+        run: |
+          cd skill
+          zip -r ../adapty-migration-skill.zip .
+          cd ..
+          ls -la adapty-migration-skill.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: adapty-migration-skill.zip
+          generate_release_notes: true
+          body: |
+            Download `adapty-migration-skill.zip` below and upload it to Claude:
+            - **Claude.ai web/desktop:** Settings → Capabilities → Skills → Upload skill
+            - **Claude Code:** unzip into `~/.claude/skills/adapty-migration-skill/` and restart your terminal
