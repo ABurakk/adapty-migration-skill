@@ -2,12 +2,20 @@
 
 The migration produces working code, but the code will not function at runtime until the Adapty Dashboard is configured. This checklist is mandatory — it gets copied (and customized with project-specific names) into the "Adapty Dashboard checklist" section of every `MIGRATION_REPORT.md`, regardless of what the user asked for.
 
+This file is **shared across platforms** (iOS and Flutter migrations both copy it into the report). The Adapty Dashboard is the same dashboard regardless of SDK. The skill applies the per-platform store sections based on what the project targets:
+
+- **iOS-only migration** → include the App Store Connect sections (§2–§4), skip the Google Play sections (§4b).
+- **Flutter migration targeting iOS only** → same as iOS-only above.
+- **Flutter migration targeting Android only** → skip §2–§4 (App Store Connect / ASSN), include §4b (Google Play service account + Real-Time Developer Notifications).
+- **Flutter migration targeting both iOS and Android** → include §2–§4 AND §4b.
+
 The skill customizes the placeholders in **bold** with values discovered while scanning the project:
 
 - **`<ACCESS_LEVEL_NAMES>`** — the entitlement names from RevenueCat (e.g., `pro`, `premium`)
 - **`<PLACEMENT_NAMES>`** — the offering IDs from RevenueCat, used as placement IDs in Adapty
-- **`<PRODUCT_IDS>`** — App Store Connect product identifiers referenced in the RevenueCat code
-- **`<APP_BUNDLE_ID>`** — bundle identifier from the project
+- **`<PRODUCT_IDS>`** — App Store Connect / Google Play product identifiers referenced in the RevenueCat code
+- **`<APP_BUNDLE_ID>`** — bundle identifier from the project (iOS)
+- **`<ANDROID_PACKAGE_NAME>`** — Android package name (Flutter Android target)
 - **`<ATTRIBUTION_PROVIDERS>`** — Adjust / AppsFlyer / Branch / AppMetrica, if any were detected in code
 
 **Items marked 🔴 MANDATORY** are non-negotiable — skipping them silently breaks the migration at runtime.
@@ -63,14 +71,35 @@ Both production AND sandbox URLs must be configured. They are different URLs.
 
 ⚠️ **Manual review item the skill always surfaces:** "App Store Server Notifications must be switched from RevenueCat's URLs to Adapty's URLs in App Store Connect → App Information. Both production and sandbox. This is the most-missed migration step and is invisible from the iOS app code — it can only be verified in App Store Connect + Adapty Dashboard."
 
+## 4b. Google Play setup 🔴 MANDATORY for Flutter migrations targeting Android
+
+This section applies only when the project targets Android (typically Flutter migrations that ship on Google Play, or Flutter projects with the Android module configured). Skip this section entirely on iOS-only migrations.
+
+Google Play's equivalents of App Store Connect API + ASSN are: a **Google Play Developer API service account** (for product / subscription data) and **Real-Time Developer Notifications (RTDN)** via a Pub/Sub topic (for subscription state changes). Both are required for Adapty to keep server-side subscription state in sync.
+
+- [ ] In Adapty Dashboard, go to **App settings → Android SDK → Google Play integration** (or the page that currently documents Google Play integration — search `https://adapty.io/docs/` for "Google Play integration" / "Android SDK installation" if the dashboard navigation has changed)
+- [ ] Set the Android package name to **`<ANDROID_PACKAGE_NAME>`** — must match the app's actual `applicationId` in `android/app/build.gradle` exactly
+- [ ] In Google Play Console → Setup → API access → Service accounts, create a service account with the Google Play Developer API permissions Adapty currently requires (verify the exact role set against current docs — Google has changed the required roles over time)
+- [ ] Download the service account JSON key file and paste / upload it into Adapty's Google Play integration page
+- [ ] Verify the integration page shows green / connected
+- [ ] In Google Play Console → Monetization setup → Real-Time Developer Notifications, configure RTDN:
+  - [ ] Copy Adapty's **Pub/Sub topic name** from Adapty Dashboard's Google Play integration page (verify the current location — search `https://adapty.io/docs/` for "RTDN" / "Real-Time Developer Notifications" if needed)
+  - [ ] Paste the topic name into Google Play Console's RTDN settings for the app
+  - [ ] If you had RevenueCat's RTDN topic configured previously, you are REPLACING it with Adapty's. Only one RTDN topic can be active per app.
+  - [ ] Send a test notification (Google Play Console has a "Send test notification" button) and verify it arrives in Adapty Dashboard
+- [ ] If the project uses license testing, add your tester Google accounts in Google Play Console → Setup → License testing
+
+⚠️ **Manual review item the skill always surfaces (Flutter Android migrations):** "Google Play service account JSON and Real-Time Developer Notifications (RTDN) topic must be configured in Google Play Console. Switch the RTDN topic from RevenueCat's to Adapty's. Without RTDN, subscription state diverges from reality the same way ASSN does on iOS — silently, over days. This step is invisible from app code and can only be verified in Google Play Console + Adapty Dashboard."
+
 ## 5. Import products 🔴 MANDATORY
 
 - [ ] Go to **Products** in Adapty Dashboard
 - [ ] For each product the project uses (**`<PRODUCT_IDS>`**), either:
-  - Import from App Store Connect (preferred — auto-syncs metadata and prices), OR
-  - Create the product manually with the matching App Store Connect product ID (case-sensitive)
+  - Import from App Store Connect / Google Play Console (preferred — auto-syncs metadata and prices), OR
+  - Create the product manually with the matching store product ID (case-sensitive)
 - [ ] Verify each product shows the correct localized title, price, and subscription duration
-- [ ] If a product doesn't appear, App Store Connect integration (§2) is likely incomplete or the product isn't "Ready to Submit" / "Approved" in App Store Connect
+- [ ] If a product doesn't appear on iOS, App Store Connect integration (§2) is likely incomplete or the product isn't "Ready to Submit" / "Approved" in App Store Connect. On Android, check that Google Play integration (§4b) is connected and the product is "Active" in Google Play Console
+- [ ] **Flutter projects that ship on both stores:** each product must exist in BOTH App Store Connect AND Google Play Console with the same product ID where possible. Adapty represents these as a single product if the IDs match exactly across stores; otherwise you'll have two separate Adapty products
 
 ## 6. Create access levels 🔴 MANDATORY
 
@@ -168,8 +197,9 @@ This is where projects most often drop data during migration: code keeps working
 
 ## 13. Test on sandbox 🔴 MANDATORY before going live
 
-- [ ] Build and run the migrated app on a real device (sandbox purchases don't work reliably on simulator)
-- [ ] Sign in to App Store with a fresh sandbox tester account (old testers may have stuck subscription state from previous tests)
+- [ ] Build and run the migrated app on a real device (sandbox / test purchases don't work reliably on simulators or emulators)
+- [ ] **iOS / Apple-store Flutter:** sign in to App Store with a fresh sandbox tester account (old testers may have stuck subscription state from previous tests)
+- [ ] **Android / Google-Play Flutter:** use a tester account added to Google Play Console → License testing. Old subscription state on the account can interfere — cancel and refund any test subscriptions before re-testing
 - [ ] Trigger the paywall — it should load and display products
 - [ ] **Paywall Builder migrations:** the paywall UI should render via AdaptyUI. If it doesn't, check `hasViewConfiguration` log line (§9 — "Show on device") and Xcode console for `AdaptyUI` errors.
 - [ ] **Custom paywall migrations:** the product list should populate in your custom UI. If empty, check products are assigned to the placement (§7) and to the paywall (§8).
@@ -183,7 +213,8 @@ This is where projects most often drop data during migration: code keeps working
 Only after Adapty is verified working in production:
 
 - [ ] Remove RevenueCat from billing in your RevenueCat dashboard
-- [ ] Remove RevenueCat ASSN URLs from App Store Connect (already overwritten in §4, but verify)
+- [ ] Remove RevenueCat ASSN URLs from App Store Connect (already overwritten in §4, but verify) — iOS / Apple-store Flutter only
+- [ ] Remove RevenueCat's RTDN topic from Google Play Console (already overwritten in §4b, but verify) — Android / Google-Play Flutter only
 - [ ] Archive or delete the RevenueCat project
 - [ ] Remove any RevenueCat-related backend webhooks and SDK API keys from your secrets manager
 - [ ] Document the cut-over date for your team
@@ -196,14 +227,16 @@ Only after Adapty is verified working in production:
 
 These are the most common reasons a "correctly migrated" Adapty integration fails at runtime:
 
-1. **"Show on device" disabled** — Paywall Builder paywall returns `hasViewConfiguration == false`; UI renders nothing. (§9)
-2. **App Store Server Notifications not switched** — subscription state diverges from reality over days/weeks. (§4)
-3. **Placement not published** — paywall exists in dashboard but is in draft state → `getPaywallConfiguration` fails. (§8)
-4. **Access level name mismatch** — code says `"premium"`, dashboard has `"Premium"` → silent denial of access. (§6)
-5. **Wrong API key** — using the SDK Secret Key instead of the Public SDK Key, or pasting the RevenueCat key, or using the test key in production. (§10)
-6. **Products not imported** — products exist in App Store Connect but haven't been pulled into Adapty. (§5)
-7. **Placement-product assignment missing** — paywall has no products to show because none were attached to the placement. (§7)
-8. **Shared secret missing** — receipt validation silently fails server-side. (§3)
-9. **Attribution integration code-only** — `Adapty.updateAttribution` called but dashboard integration not configured → data dropped. (§11)
-10. **Webhooks not re-configured** — downstream analytics / CRM goes silent without warning. (§12)
-11. **Sandbox tester account stuck** — old subscriptions from previous tests interfering; create a fresh sandbox tester.
+1. **"Show on device" disabled** — Paywall Builder paywall returns `hasViewConfiguration` false/empty; UI renders nothing. (§9)
+2. **App Store Server Notifications not switched** (iOS / Apple-store Flutter) — subscription state diverges from reality over days/weeks. (§4)
+3. **Google Play RTDN topic not switched** (Android / Google-Play Flutter) — same silent divergence on Android. (§4b)
+4. **Placement not published** — paywall exists in dashboard but is in draft state → paywall fetch returns no view configuration. (§8)
+5. **Access level name mismatch** — code says `"premium"`, dashboard has `"Premium"` → silent denial of access. (§6)
+6. **Wrong API key** — using the SDK Secret Key instead of the Public SDK Key, or pasting the RevenueCat key, or using the test key in production. (§10)
+7. **Products not imported** — products exist in App Store Connect / Google Play Console but haven't been pulled into Adapty. (§5)
+8. **Placement-product assignment missing** — paywall has no products to show because none were attached to the placement. (§7)
+9. **Shared secret missing** (iOS) — receipt validation silently fails server-side. (§3)
+10. **Google Play service account JSON missing or expired** (Android) — product data can't be read; products show as unavailable. (§4b)
+11. **Attribution integration code-only** — attribution call succeeds but dashboard integration not configured → data dropped. (§11)
+12. **Webhooks not re-configured** — downstream analytics / CRM goes silent without warning. (§12)
+13. **Sandbox / test account stuck** — old subscriptions from previous tests interfering; create a fresh sandbox tester (iOS) or clear license-testing subscription state (Android). (§13)

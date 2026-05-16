@@ -2,8 +2,8 @@
 
 This file contains the patterns shared by **every** RevenueCat → Adapty migration regardless of paywall flavor: installation, activation, identification, the `AdaptyManager` singleton, and the strict call-ordering invariants. Path-specific patterns live in two separate files:
 
-- `references/paywall-builder-path.md` — for projects that use RevenueCatUI (`PaywallView`, `paywallFooter`, `presentPaywallIfNeeded`) → migrate to AdaptyUI + `.paywall()` modifier
-- `references/custom-paywall-path.md` — for projects with custom paywall UI and direct purchase calls → migrate to `Adapty.getPaywall` + `Adapty.getPaywallProducts` + `Adapty.makePurchase`
+- `paywall-builder-path.md` (sibling file) — for projects that use RevenueCatUI (`PaywallView`, `paywallFooter`, `presentPaywallIfNeeded`) → migrate to AdaptyUI + `.paywall()` modifier
+- `custom-paywall-path.md` (sibling file) — for projects with custom paywall UI and direct purchase calls → migrate to `Adapty.getPaywall` + `Adapty.getPaywallProducts` + `Adapty.makePurchase`
 
 **Target platform:** iOS 13+ (Adapty 3.x minimum)
 **Language:** Swift 5.7+ (async/await required)
@@ -190,8 +190,8 @@ These invariants are why the SDK uses async/throws and why this skill audits eve
 
 Paywall presentation and purchase mechanics depend on which path applies — load the matching file:
 
-- Project uses RevenueCatUI → `references/paywall-builder-path.md`
-- Project uses custom paywall UI + direct purchase → `references/custom-paywall-path.md`
+- Project uses RevenueCatUI → `paywall-builder-path.md` (sibling file in this directory)
+- Project uses custom paywall UI + direct purchase → `custom-paywall-path.md` (sibling file in this directory)
 
 Other topics not covered here (consult the current Adapty docs at `https://adapty.io/docs/` when encountered):
 
@@ -199,5 +199,5 @@ Other topics not covered here (consult the current Adapty docs at `https://adapt
 - Custom user attributes (`Adapty.updateProfile`)
 - `AdaptyDelegate` for profile-change push events
 - Observer mode (rare; the skill flags this and asks for confirmation)
-- Server-side receipt validation / App Store Server Notifications — see `dashboard-checklist.md`
+- Server-side receipt validation / App Store Server Notifications — see `../dashboard-checklist.md`
 - Verbose logging configuration — see the builder form in §3
